@@ -1,4 +1,6 @@
-function find() { // Egzersiz A
+const db = require('../../data/db-config');
+
+async function find() { // Egzersiz A
   /*
     1A- Aşağıdaki SQL sorgusunu SQLite Studio'da "data/schemes.db3" ile karşılaştırarak inceleyin.
     LEFT joini Inner joine çevirirsek ne olur?
@@ -15,9 +17,16 @@ function find() { // Egzersiz A
     2A- Sorguyu kavradığınızda devam edin ve onu Knex'te oluşturun.
     Bu işlevden elde edilen veri kümesini döndürün.
   */
+const result = await db('schemes')
+  .select('schemes.*', db.raw('count(steps.step_id) as number_of_steps'))
+  .leftJoin('steps', 'schemes.scheme_id', 'steps.scheme_id')
+  .groupBy('schemes.scheme_id')
+  .orderBy('schemes.scheme_id', 'asc')
+
+  return result;
 }
 
-function findById(scheme_id) { // Egzersiz B
+async function findById(scheme_id) { // Egzersiz B
   /*
     1B- Aşağıdaki SQL sorgusunu SQLite Studio'da "data/schemes.db3" ile karşılaştırarak inceleyin:
 
@@ -83,9 +92,31 @@ function findById(scheme_id) { // Egzersiz B
         "steps": []
       }
   */
+  const data = await db('schemes as sc')
+    .select('sc.scheme_name', 'sc.scheme_id as scheme_id_original', 'st.*')
+    .leftJoin('steps as st', 'sc.scheme_id', 'st.scheme_id')
+    .where('sc.scheme_id', scheme_id)
+    .orderBy('st.step_number', 'asc');
+
+  const result = data.length > 0 ? {
+    scheme_id: data[0].scheme_id_original,
+    scheme_name: data[0].scheme_name,       
+    steps: data[0].step_id ? data.map(step => ({
+      step_id: step.step_id,
+      step_number: step.step_number,
+      instructions: step.instructions
+    })) : []
+  } : null;
+
+  return result;  
 }
 
-function findSteps(scheme_id) { // Egzersiz C
+async function findSteps(scheme_id) { // Egzersiz C
+  return db('steps as st')
+    .join('schemes as sc', 'st.scheme_id', 'sc.scheme_id')
+    .select('st.step_id', 'st.step_number', 'st.instructions', 'sc.scheme_name')
+    .where('st.scheme_id', scheme_id)
+    .orderBy('st.step_number', 'asc');
   /*
     1C- Knex'te aşağıdaki verileri döndüren bir sorgu oluşturun.
     Adımlar, adım_numarası'na göre sıralanmalıdır ve dizi
@@ -106,20 +137,33 @@ function findSteps(scheme_id) { // Egzersiz C
         }
       ]
   */
+
 }
 
-function add(scheme) { // Egzersiz D
+async function add(scheme) { // Egzersiz D
   /*
     1D- Bu işlev yeni bir şema oluşturur ve _yeni oluşturulan şemaya çözümlenir.
   */
+const data = await db('schemes').insert(scheme);
+const newData = await findById(data[0]);
+return newData;
 }
 
-function addStep(scheme_id, step) { // EXERCISE E
+async function addStep(scheme_id, step) { // EXERCISE E
   /*
     1E- Bu işlev, verilen 'scheme_id' ile şemaya bir adım ekler.
     ve verilen "scheme_id"ye ait _tüm adımları_ çözer,
     yeni oluşturulan dahil.
   */
+  const newStep = {
+    scheme_id: scheme_id,
+    ...step
+  }
+
+ await db('steps').insert(newStep);
+
+  const newSteps = await findSteps(scheme_id);
+  return newSteps;
 }
 
 module.exports = {
@@ -127,5 +171,5 @@ module.exports = {
   findById,
   findSteps,
   add,
-  addStep,
+  addStep,    
 }
